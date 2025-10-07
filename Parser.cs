@@ -49,10 +49,7 @@ namespace MS2IPL
 
 			if (s_statementType == StatementType.@switch && (tokens[0] is not StatementToken s ||
 				(s.Type != StatementType.@case && s.Type != StatementType.@default && s.Type != StatementType.cls)))
-			{
-				Logger.AddMessage($"Invalid token {tokens[0]} at the line\n{s_line}\nnumber{s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseLine)}", Logger.MessageType.SyntaxError);
-				return null;
-			}
+				return Error<CodeNode>($"Invalid token {tokens[0]} at the line\n{s_line}\nnumber{s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseLine)}");
 			if (s_statementType == StatementType.ifelse && (tokens[0] is not StatementToken s1 ||
 				(s1.Type != StatementType.elif && s1.Type != StatementType.@else)))
 				((IfElseChain)s_statements.Pop()).Complete(s_currentScript);
@@ -66,8 +63,7 @@ namespace MS2IPL
 				case TokenType.Variable:
 					return ParseAssignment(tokens, 0, tokens.Length - 1);
 				default:
-					Logger.AddMessage($"The line\n{s_line}\nnumber {s_lineIndex} cannot start with {tokens[0]} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseLine)}", Logger.MessageType.SyntaxError);
-					return null;
+					return Error<CodeNode>($"The line\n{s_line}\nnumber {s_lineIndex} cannot start with {tokens[0]} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseLine)}");
 			}
 		}
 
@@ -79,10 +75,7 @@ namespace MS2IPL
 				case StatementType.PRINT:
 					ExpressionNode expression = ParseExpression(tokens, start + 1, end);
 					if (expression == null)
-					{
-						Logger.AddMessage($"Invalid expression at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}", Logger.MessageType.SyntaxError);
-						return null;
-					}
+						return Error<CodeNode>($"Invalid expression at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}");
 					return new PRINT(expression);
 
 				case StatementType.@if:
@@ -95,11 +88,8 @@ namespace MS2IPL
 
 				case StatementType.@elif:
 					if (!s_statements.TryPeek(out Statement s) || s is not IfElseChain ch1 || ch1.Completed)
-					{
-						Logger.AddMessage($"Cannot add elif at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}", Logger.MessageType.SyntaxError);
-						return null;
-					}
-
+						return Error<CodeNode>($"Cannot add elif at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}");
+					
 					ParseCondition(tokens, ch1);
 					if (s_lineIndex >= s_lines.Length - 1)
 						ch1.Complete(s_currentScript);
@@ -107,10 +97,8 @@ namespace MS2IPL
 
 				case StatementType.@else:
 					if (!s_statements.TryPeek(out s) || s is not IfElseChain ch2 || ch2.Completed)
-					{
-						Logger.AddMessage($"Cannot add else at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}", Logger.MessageType.SyntaxError);
-						return null;
-					}
+						return Error<CodeNode>($"Cannot add else at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}");
+					
 					var @else = new Condition(s_currentScript);
 					s_statements.Push(@else);
 					StatementList body = ParseBody();
@@ -130,6 +118,7 @@ namespace MS2IPL
 					ExpressionNode condition = null;
 					if (statement.Type == StatementType.@while)
 						condition = ParseExpression(tokens, 1, tokens.Length - 1);
+
 					var @while = new While(s_currentScript, condition);
 					s_statements.Push(@while);
 					body = ParseBody();
@@ -140,10 +129,7 @@ namespace MS2IPL
 				case StatementType.@for:
 					int[] semicolons = FindSemicolons(tokens);
 					if (semicolons.Length == 0 || semicolons.Length > 2)
-					{
-						Logger.AddMessage($"for in the line\n{s_line}\nnumber {s_lineIndex} cannot have {semicolons.Length} semicolons at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}", Logger.MessageType.SyntaxError);
-						return null;
-					}
+						return Error<CodeNode>($"for in the line\n{s_line}\nnumber {s_lineIndex} cannot have {semicolons.Length} semicolons at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}");
 					
 					if (semicolons.Length == 1)
 					{
@@ -172,10 +158,8 @@ namespace MS2IPL
 				case StatementType.@continue:
 				case StatementType.cls:
 					if (tokens.Length != 1)
-					{
-						Logger.AddMessage($"{statement.Type} must be the only token in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}", Logger.MessageType.SyntaxError);
-						return null;
-					}
+						return Error<CodeNode>($"{statement.Type} must be the only token in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}");
+					
 					return statement.Type switch
 					{
 						StatementType.cls => SingletoneStatement.CLS,
@@ -184,8 +168,7 @@ namespace MS2IPL
 					};
 
 				default:
-					Logger.AddMessage($"Unknown statement type for token {statement} for line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}", Logger.MessageType.SyntaxError);
-					return null;
+					return Error<CodeNode>($"Unknown statement type for token {statement} for line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}");
 			}
 		}
 
@@ -218,10 +201,7 @@ namespace MS2IPL
 
 				Case node;
 				if (tokens[0] is not StatementToken st || (st.Type != StatementType.@case && st.Type != StatementType.@default))
-				{
-					Logger.AddMessage($"Invalid token {tokens[0]} at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseSwitch)}", Logger.MessageType.SyntaxError);
-					return null;
-				}
+					return Error<Switch>($"Invalid token {tokens[0]} at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseSwitch)}");
 				else node = ParseCase(tokens, values, type);
 
 				if (node != null)
@@ -242,8 +222,7 @@ namespace MS2IPL
 				return @switch;
 			}
 
-			Logger.AddMessage($"switch at the line\n{cur_line.Item2}\n number {cur_line.Item1} is not closed at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseSwitch)}", Logger.MessageType.SyntaxError);
-			return null;
+			return Error<Switch>($"switch at the line\n{cur_line.Item2}\n number {cur_line.Item1} is not closed at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseSwitch)}");
 		}
 
 		private static Case ParseCase(Token[] tokens, Dictionary<int, object> values, TypeNode type)
@@ -259,29 +238,25 @@ namespace MS2IPL
 					if (tokens[i] is VariableToken v)
 					{
 						if (v.Variable.ReturnType == null)
-						{
-							Logger.AddMessage($"Variable {v.Variable} in the line\n{s_line}\nnumber {s_lineIndex} is not defined at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}", Logger.MessageType.SyntaxError);
-							return null;
-						}
+							return Error<Case>($"Variable {v.Variable} in the line\n{s_line}\nnumber {s_lineIndex} is not defined at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}");
 						if (v.Variable.ReturnType != type)
-							Logger.AddMessage($"Variable {v.Variable} in the line\n{s_line}\nnumber {s_lineIndex} has invalid type. The variable will be ignored at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}", Logger.MessageType.Warning);
+							Warn($"Variable {v.Variable} in the line\n{s_line}\nnumber {s_lineIndex} has invalid type. The variable will be ignored at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}");
 						else
-							Logger.AddMessage($"Variable {v.Variable} in the line\n{s_line}\nnumber {s_lineIndex} might have the same value as ones in different cases. If it does, only the first case with this value will matter at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}", Logger.MessageType.Warning);
+							Warn($"Variable {v.Variable} in the line\n{s_line}\nnumber {s_lineIndex} might have the same value as ones in different cases. If it does, only the first case with this value will matter at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}");
 						caseValues[i - 1] = v.Variable;
 						continue;
 					}
 					else if (tokens[i] is ValueToken val)
 					{
 						if (TypeSystem.TypeOf(val.Value) != type)
-							Logger.AddMessage($"Value {val.Value} in the line\n{s_line}\nnumber {s_lineIndex} has invalid type. The value will be ignored at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}", Logger.MessageType.Warning);
+							Warn($"Value {val.Value} in the line\n{s_line}\nnumber {s_lineIndex} has invalid type. The value will be ignored at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}");
 						else if (values.ContainsValue(val.Value))
-							Logger.AddMessage($"Value {val.Value} in the line\n{s_line}\nnumber {s_lineIndex} has the same value as ones in different cases. Only the first case with this value will matter at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}", Logger.MessageType.Warning);
+							Warn($"Value {val.Value} in the line\n{s_line}\nnumber {s_lineIndex} has the same value as ones in different cases. Only the first case with this value will matter at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}");
 						caseValues[i - 1] = new ConstantValue(s_currentScript, val.Value);
 						values.Add(values.Count, val.Value);
 						continue;
 					}
-					Logger.AddMessage($"Token {tokens[i]} in the line\n{s_line}\nnumber {s_lineIndex} is not a value or a variable at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}", Logger.MessageType.SyntaxError);
-					return null;
+					return Error<Case>($"Token {tokens[i]} in the line\n{s_line}\nnumber {s_lineIndex} is not a value or a variable at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseCase)}");
 				}
 				node = new Case(s_currentScript, type, caseValues);
 			}
@@ -350,8 +325,7 @@ namespace MS2IPL
 				return statements;
 			}
 
-			Logger.AddMessage($"{s_statementType} at the line\n{cur_line.Item2}\nnumber {cur_line.Item1} is not closed at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseBody)}", Logger.MessageType.SyntaxError);
-			return null;
+			return Error<StatementList>($"{s_statementType} at the line\n{cur_line.Item2}\nnumber {cur_line.Item1} is not closed at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseBody)}");
 		}
 
 		private static Assignment ParseDeclaration(Token[] tokens, int start, int end)
@@ -362,15 +336,9 @@ namespace MS2IPL
 				assign_pos += tokens.Length + 1;
 
 			if (start == end || tokens[assign_pos - 1] is not VariableToken varToken || type == null)
-			{
-				Logger.AddMessage($"Invalid variable declaration at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseDeclaration)}", Logger.MessageType.SyntaxError);
-				return null;
-			}
+				return Error<Assignment>($"Invalid variable declaration at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseDeclaration)}");
 			if (varToken.Variable.ReturnType != null)
-			{
-				Logger.AddMessage($"Variable from the token {varToken} at the line\n{s_line}\nnumber {s_lineIndex} already exists at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseDeclaration)}", Logger.MessageType.SyntaxError);
-				return null;
-			}
+				return Error<Assignment>($"Variable from the token {varToken} at the line\n{s_line}\nnumber {s_lineIndex} already exists at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseDeclaration)}");
 
 			s_declaringLValue = true;
 			Assignment ret;
@@ -391,33 +359,21 @@ namespace MS2IPL
 			//Console.WriteLine($"assign {s_lineIndex} {start} {end}");
 			(OperatorToken, int) op = FindAssignmentOperator(tokens, start, end);
 			if (start >= op.Item2 || op.Item2 >= end)
-			{
-				Logger.AddMessage($"Invalid assignment at the line \n{s_line}\n number {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseAssignment)}", Logger.MessageType.SyntaxError);
-				return null;
-			}
+				return Error<Assignment>($"Invalid assignment at the line \n{s_line}\n number {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseAssignment)}");
 
 			ExpressionNode lvalue = ParseExpression(tokens, start, op.Item2 - 1);
 			if (lvalue == null)
 				return null;
 
 			if (lvalue is not Variable var)
-			{
-				Logger.AddMessage($"Invalid lvalue at the line \n{s_line}\n number {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseAssignment)}", Logger.MessageType.SyntaxError);
-				return null;
-			}
+				return Error<Assignment>($"Invalid lvalue at the line \n{s_line}\n number {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseAssignment)}");
 
 			if (declaring != null)
 			{
 				if (var != declaring.Variable)
-				{
-					Logger.AddMessage($"Invalid declaration of variable from the token {declaring} at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseAssignment)}", Logger.MessageType.SyntaxError);
-					return null;
-				}
+					return Error<Assignment>($"Invalid declaration of variable from the token {declaring} at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseAssignment)}");
 				if (op.Item1.Type != OperatorType.Assign)
-				{
-					Logger.AddMessage($"Cannot use variable {var} before initialized ath the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseAssignment)}", Logger.MessageType.SyntaxError);
-					return null;
-				}
+					return Error<Assignment>($"Cannot use variable {var} before initialized ath the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseAssignment)}");
 			}
 
 			s_declaringLValue = false;
@@ -440,15 +396,9 @@ namespace MS2IPL
 		{
 			//Console.WriteLine($"exp {s_lineIndex} {start} {end}");
 			if (HasNonExpressionTokens(tokens, start, end, out Token token))
-			{
-				Logger.AddMessage($"Invalid token {token} in expression at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression)}", Logger.MessageType.SyntaxError);
-				return null;
-			}
+				return Error<ExpressionNode>($"Invalid token {token} in expression at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression)}");
 			if (InvalidBrckets(tokens, start, end))
-			{
-				Logger.AddMessage($"Invalid brackets in expression in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression)}", Logger.MessageType.SyntaxError);
-				return null;
-			}
+				return Error<ExpressionNode>($"Invalid brackets in expression in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression)}");
 			return ParseExpression_(tokens, start, end);
 		}
 
@@ -492,10 +442,7 @@ namespace MS2IPL
 		{
 			//Logger.AddMessage($"Expression parsing attempt between {tokens[start]} and {tokens[end]}\n{s_original}", Logger.MessageType.Debug);
 			if (end - start < 0)
-			{
-				Logger.AddMessage($"Empty expression at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression_)}", Logger.MessageType.SyntaxError);
-				return null;
-			}
+				return Error<ExpressionNode>($"Empty expression at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression_)}");
 
 			if (end == start)
 			{
@@ -503,26 +450,19 @@ namespace MS2IPL
 				if (token is VariableToken variable)
 				{
 					if (variable.Variable.ReturnType == null && !s_declaringLValue)
-					{
-						Logger.AddMessage($"Cannot use variable {variable.Variable} before declared at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression_)}", Logger.MessageType.SyntaxError);
-						return null;
-					}
+						return Error<ExpressionNode>($"Cannot use variable {variable.Variable} before declared at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression_)}");
 					return variable.Variable;
 				}
 				if (token is ValueToken value)
 					return new ConstantValue(s_currentScript, value.Value);
-				Logger.AddMessage($"Cannot create expression with {token.TokenType} at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression_)}", Logger.MessageType.SyntaxError);
-				return null;
+				return Error<ExpressionNode>($"Cannot create expression with {token.TokenType} at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression_)}");
 			}
 
 			(OperatorToken op, int index) = FindOperator(tokens, start, end, out bool error);
 			if (op == null)
 			{
 				if (error)
-				{
-					Logger.AddMessage($"Something is wrong with the expression between {tokens[start]} and {tokens[end]} at the line\n{s_line}\nnumber {s_lineIndex} idk how to explain at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression_)}", Logger.MessageType.SyntaxError);
-					return null;
-				}
+					return Error<ExpressionNode>($"Something is wrong with the expression between {tokens[start]} and {tokens[end]} at the line\n{s_line}\nnumber {s_lineIndex} idk how to explain at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseExpression_)}");
 				//Debug.Log($"{start + 1} {end + 1} {tokens[start + 1]} {tokens[end - 1]}");
 				ExpressionNode node = ParseExpression_(tokens, start + 1, end - 1);
 				if (node == null)
@@ -597,5 +537,14 @@ namespace MS2IPL
 			error &= ret == null;
 			return (ret, index);
 		}
+
+		private static T Error<T>(object exception) where T : CodeNode
+		{
+			s_currentScript.AddError();
+			Logger.AddMessage(exception, Logger.MessageType.SyntaxError);
+			return null;
+		}
+
+		private static void Warn(object message) => Logger.AddMessage(message, Logger.MessageType.Warning);
 	}
 }

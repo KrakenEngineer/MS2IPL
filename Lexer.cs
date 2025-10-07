@@ -58,10 +58,7 @@ namespace MS2IPL
 			//	Console.WriteLine(substrings[i]);
 
 			if (incompleteString)
-			{
-				Logger.AddMessage($"String in the line\n{s_line}\nnumber {s_lineIndex} is not completed at {nameof(MS2IPL)}.{nameof(Lexer)}.{nameof(Analyse)}", Logger.MessageType.LexycalError);
-				return null;
-			}
+				return Error<Token[]>($"String in the line\n{s_line}\nnumber {s_lineIndex} is not completed at {nameof(MS2IPL)}.{nameof(Lexer)}.{nameof(Analyse)}");
 
 			for (int i = 0; i < substrings.Count; i++)
 			{
@@ -150,10 +147,7 @@ namespace MS2IPL
 					//Console.WriteLine($"{s_operators[i]} token {m.Value}");
 					rawTokensList.Add(new RawToken(m.Value, m.Index + offset, TokenType.Operator));
 					if (OperatorCollection.IsOperator(rawTokensList[^1].Content, OperatorType.None))
-					{
-						Logger.AddMessage($"Invalid operator {rawTokensList[^1]} at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Lexer)}.{nameof(AnalyseSubstring)}", Logger.MessageType.LexycalError);
-						return null;
-					}
+						return Error<List<RawToken>>($"Invalid operator {rawTokensList[^1]} at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Lexer)}.{nameof(AnalyseSubstring)}");
 				}
 				//Console.WriteLine(s_operators[i]);
 			}
@@ -313,8 +307,7 @@ namespace MS2IPL
 					else op.IsAssignment = true;
 					return op;
 				}
-				Logger.AddMessage($"Operator {op} cannot be used with setter at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Lexer)}.{nameof(GenerateOperator)}", Logger.MessageType.SyntaxError);
-				return null;
+				return Error<OperatorToken>($"Operator {op} cannot be used with setter at the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Lexer)}.{nameof(GenerateOperator)}");
 			}
 
 			var ret = new OperatorToken(s_stringToOperator[token.Content], token.Index);
@@ -386,6 +379,13 @@ namespace MS2IPL
 				return false;
 			t.Index = token.Index;
 			return true;
+		}
+
+		private static T Error<T>(object exception) where T : class
+		{
+			s_currentScript.AddError();
+			Logger.AddMessage(exception, Logger.MessageType.LexycalError);
+			return null;
 		}
 
 		public static void DebugTokens(string path, string line, Token[] tokens)

@@ -13,6 +13,12 @@ namespace MS2IPL
 
 		public abstract object Execute(out ReturnCode ret);
 
+		protected static object Error(object exception)
+		{
+			Logger.AddMessage(exception, Logger.MessageType.RuntimeError);
+			return null;
+		}
+
 		protected virtual void CompleteConstruction(Script s)
 		{
 			_script = s;
@@ -379,9 +385,8 @@ namespace MS2IPL
 			if (((opcode == OperatorType.Div || opcode == OperatorType.DivInt) && rightf == 0) ||
 				(opcode == OperatorType.Pow && ((leftf < 0 && right is not int) || (leftf == 0 && rightf <= 0))))
 			{
-				Logger.AddMessage($"Arithmetic error for the operation {left} {opcode} {right} in the line number {curline} in {nameof(MS2IPL)}.{nameof(BinaryOperator)}.{nameof(EvaluateArithmetic)}", Logger.MessageType.RuntimeError);
 				ret = ReturnCode.Error;
-				return null;
+				return Error($"Arithmetic error for the operation {left} {opcode} {right} in the line number {curline} in {nameof(MS2IPL)}.{nameof(BinaryOperator)}.{nameof(EvaluateArithmetic)}");
 			}
 			ret = ReturnCode.Success;
 
@@ -777,8 +782,7 @@ namespace MS2IPL
 			if (_statementType == StatementType.cls)
 			{
 				ret = ReturnCode.Error;
-				Logger.AddMessage("cls evaluated wtf", Logger.MessageType.RuntimeError);
-				return null;
+				return Error("cls evaluated wtf");
 			}
 			ret = _statementType == StatementType.@break ? ReturnCode.Break : ReturnCode.Continue;
 			return null;

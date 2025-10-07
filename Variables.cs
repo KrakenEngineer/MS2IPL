@@ -115,10 +115,7 @@ namespace MS2IPL
         public void Set(object value)
         {
             if (TypeSystem.TypeOf(value) != _returnType)
-            {
-                Logger.AddMessage($"Invalid value at {nameof(MS2IPL)}.{nameof(VariableTable)}.{nameof(Set)}", Logger.MessageType.Debug);
-                return;
-            }
+				Error($"Invalid value at {nameof(MS2IPL)}.{nameof(VariableTable)}.{nameof(Set)}");
             _value = value;
         }
 
