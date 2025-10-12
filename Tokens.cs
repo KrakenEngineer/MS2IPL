@@ -89,6 +89,7 @@ namespace MS2IPL
 			OperatorType.Mul or OperatorType.Div or OperatorType.DivInt or OperatorType.Mod or OperatorType.StrMul => 11,
 			OperatorType.Pow => 12,
 			OperatorType.Neg or OperatorType.Not or OperatorType.Char or OperatorType.ChCode => 13,
+			OperatorType.Dot => 14,
 			_ => -1,
 		};
 
@@ -164,6 +165,22 @@ namespace MS2IPL
 		@while, always, @for, @break, @continue
 	}
 
+	public class MemberToken : ExpressionToken
+	{
+		public override TokenType TokenType => TokenType.Member;
+		public string Name;
+
+		public MemberToken(string name, int index)
+		{
+			Name = name;
+			Index = index;
+		}
+
+		public override MemberToken Copy(Script s) => new MemberToken(Name, Index);
+
+		public override string ToString() => $"MemberToken (name: {Name} at: {Index})";
+	}
+
 	public class RawToken
 	{
 		public string Content;
@@ -183,12 +200,12 @@ namespace MS2IPL
 	public enum TokenType : byte
 	{
 		None,
-		Special,
 		Value,
 		Variable,
 		Operator,
 		Bracket,
 		Type,
-		Statement
+		Statement,
+		Member
 	}
 }

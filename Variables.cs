@@ -15,6 +15,7 @@ namespace MS2IPL
             if (maxCount <= 0)
                 Logger.AddMessage($"Invalid max variables count at constructor of {nameof(MS2IPL)}.{nameof(VariableTable)}", Logger.MessageType.Debug);
             _maxCount = maxCount;
+			TryAdd(Variable.STD);
         }
 
 		public VariableTable(VariableTable variables)
@@ -130,6 +131,9 @@ namespace MS2IPL
         }
 
         public string Name => _name;
+
+		private static Variable _std = new Variable(null, "std", MS2IPL.STD.Instance);
+		public static Variable STD => _std;
 
 		//public bool IsNull => _value == null || (_value is LogicPart p && p.Part == null) ||
 		//     (_value is Component c && (c.Part == null || c.Get() == null || c.Part == null || c.Part.Part == null));

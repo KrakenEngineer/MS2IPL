@@ -14,6 +14,7 @@ namespace MS2IPL
 			{
 				{ OperatorType.Ter1, new OperatorData("\\?", OperatorType.Ter1, false) },
 				{ OperatorType.Ter2, new OperatorData("\\:", OperatorType.Ter2, false) },
+				{ OperatorType.Dot, new OperatorData("\\.", OperatorType.Dot, false) },
 
 				{ OperatorType.Add, new OperatorData("\\+", OperatorType.Add) },
 				{ OperatorType.Sub, new OperatorData("-", OperatorType.Sub) },
@@ -70,7 +71,7 @@ namespace MS2IPL
 
 	public enum OperatorType : byte
 	{
-		None, Ter1, Ter2,
+		None, Ter1, Ter2, Dot,
 		Add, Sub, Neg,
 		Mul, Pow, Div, DivInt, Mod,
 		Not, Or, Or2, And, And2, Xor,

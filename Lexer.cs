@@ -15,6 +15,7 @@ namespace MS2IPL
 		{
 			{ "?", OperatorType.Ter1 },
 			{ ":", OperatorType.Ter2 },
+			{ ".", OperatorType.Dot },
 			{ "+", OperatorType.Add },
 			{ "-", OperatorType.Sub },
 			{ "*", OperatorType.Mul },
@@ -82,12 +83,38 @@ namespace MS2IPL
 
 			for (int i = 1; i < rawTokens.Length; i++)
 			{
-				curToken = GenerateToken(tokens[^1], rawTokens[i], variables);
+				curToken = GenerateToken(tokens, rawTokens[i], variables);
 				if (curToken == null)
 					return null;
 				if (curToken == tokens[^1])
 					continue;
 				tokens.Add(curToken);
+				if (!(tokens[^1] is ValueToken v && TypeSystem.TypeOf(v.Value) == TypeNode.Int &&
+					tokens[^2] is OperatorToken o && o.Type == OperatorType.Dot))
+					continue;
+
+				if (i == 1)
+				{
+					v.Value = (decimal)v.Value / (decimal)Math.Pow(10, rawTokens[i].Content.Length);
+					tokens.RemoveAt(tokens.Count - 2);
+					continue;
+				}
+				if (tokens[^3] is ValueToken v1)
+				{
+					if (TypeSystem.TypeOf(v1.Value) == TypeNode.Int)
+					{
+						v1.Value = Convert.ToDecimal(v1.Value) + Convert.ToDecimal((long)v.Value / (decimal)Math.Pow(10, rawTokens[i].Content.Length));
+						tokens.RemoveAt(tokens.Count - 1); tokens.RemoveAt(tokens.Count - 1);
+						continue;
+					}
+					if (TypeSystem.TypeOf(v1.Value) == TypeNode.Float)
+						return Error<Token[]>($"Decimal number cannot have two or more separators int the line\n{line}\nnumber {index} at {nameof(MS2IPL)}.{nameof(Lexer)}.{nameof(Analyse)}");
+				}
+				else
+				{
+					v.Value = (decimal)v.Value / (decimal)Math.Pow(10, rawTokens[i].Content.Length);
+					tokens.RemoveAt(tokens.Count - 2);
+				}
 			}
 			return tokens.ToArray();
 		}
@@ -223,12 +250,14 @@ namespace MS2IPL
 			return tokens;
 		}
 
-		private static Token GenerateToken(Token prev, RawToken current, VariableTable variables)
+		private static Token GenerateToken(List<Token> tokens, RawToken current, VariableTable variables)
 		{
 			if (TryGenerateTextToken(current, out Token t))
 				return t;
+			//Console.WriteLine(current);
 			if (current.Type == TokenType.None)
-				current.Type = RecognizeTokenType(prev, current.Content, variables);
+				current.Type = RecognizeTokenType(tokens?[^1], current.Content, variables);
+			//Console.WriteLine($"{current} {RecognizeTokenType(prev, current.Content, variables)}");
 			if (current.Type == TokenType.None)
 			{
 				if (!IsVariableNameValid(current.Content))
@@ -241,17 +270,20 @@ namespace MS2IPL
 			{
 				TokenType.Value => GenerateValue(current),
 				TokenType.Type => GenerateType(current),
-				TokenType.Operator => GenerateOperator(prev, current),
+				TokenType.Operator => GenerateOperator(tokens[^1], current),
 				TokenType.Bracket => GenerateBracket(current),
-				TokenType.Variable => GenerateVariable(current, variables),
+				TokenType.Variable => new VariableToken(variables.GetPointer(current.Content), current.Index),
+				TokenType.Member => new MemberToken(current.Content, current.Index),
 				_ => throw new Exception($"Invalid token type {current.Type}")
 			};
 		}
 
 		private static TokenType RecognizeTokenType(Token prev, string token, VariableTable variables)
 		{
-			if (decimal.TryParse(token, System.Globalization.NumberStyles.Float, StringUtility.s_ConfigDecoding, out decimal d))
+			if (long.TryParse(token, out long d))
 				return TokenType.Value;
+			if (prev is OperatorToken op && op.Type == OperatorType.Dot)
+				return TokenType.Member;
 			if (variables.Exists(token))
 				return TokenType.Variable;
 			if (TypeSystem.TypeOf(token) != null)
@@ -277,8 +309,6 @@ namespace MS2IPL
 				return new ValueToken(b, token.Index);
 			if (long.TryParse(token.Content, out long l))
 				return new ValueToken(l, token.Index);
-			if (decimal.TryParse(token.Content, System.Globalization.NumberStyles.Float, StringUtility.s_ConfigDecoding, out decimal d))
-				return new ValueToken(d, token.Index);
 			if (StringUtility.IsString(token.Content))
 				return new ValueToken(StringUtility.ParseString(token.Content), token.Index);
 			throw new NotImplementedException($"Value type of {token.Content} isn't supported yet");
@@ -333,9 +363,6 @@ namespace MS2IPL
 				_ => null
 			};
 		}
-
-		private static VariableToken GenerateVariable(RawToken token, VariableTable variables) =>
-			new VariableToken(variables.GetPointer(token.Content), token.Index);
 
 		private static VariableToken GenerateNewVariable(RawToken token, VariableTable variables)
 		{

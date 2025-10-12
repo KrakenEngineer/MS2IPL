@@ -485,6 +485,8 @@ namespace MS2IPL
 				ExpressionNode left = ParseExpression_(tokens, start, index - 1);
 				if (left == null)
 					return null;
+				if (op.Type == OperatorType.Dot)
+					return ParseDotOperator(tokens, index + 1, end, left);
 				ExpressionNode right = ParseExpression_(tokens, index + 1, end);
                 if (right == null)
 					return null;
@@ -503,6 +505,19 @@ namespace MS2IPL
 			}
 
 			throw new NotImplementedException($"{start} {end}");
+		}
+
+		private static ExpressionNode ParseDotOperator(Token[] tokens, int start, int end, ExpressionNode owner)
+		{
+			if (tokens[start] is not MemberToken m)
+				return Error<ExpressionNode>($"Token {tokens[start]} after a dot operator is not a MemberToken in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseDotOperator)}");
+			if (start == end)
+			{
+				if (!MemberCollection.TryFindMember(owner.ReturnType, m.Name, out Member mem) || mem is not Property p)
+					return Error<ExpressionNode>($"Property {m.Name} doesn't exist in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseDotOperator)}");
+				return new PropertyNode(s_currentScript, owner, p);
+			}
+			throw new NotImplementedException();
 		}
 
 		private static (OperatorToken, int) FindOperator(Token[] tokens, int start, int end, out bool error)

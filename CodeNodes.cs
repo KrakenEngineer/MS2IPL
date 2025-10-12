@@ -628,6 +628,59 @@ namespace MS2IPL
 		protected override void HandleTypeDepended() { }
 	}
 
+	public abstract class MemberNode<T> : ExpressionNode where T : Member
+	{
+		protected ExpressionNode _owner;
+		protected T _member;
+
+		public override TypeNode GetReturnType() => _member.ReturnType;
+	}
+
+	public sealed class PropertyNode : MemberNode<Property>
+	{
+		public PropertyNode(Script s, ExpressionNode owner, Property prop)
+		{
+			base.CompleteConstruction(s);
+			_owner = owner;
+			_member = prop;
+			_returnType = GetReturnType();
+		}
+
+		public override object Execute(out ReturnCode ret)
+		{
+			if (!_isPreEvaluating)
+				AcceptExecution();
+			object owner = _owner.Execute(out ret);
+			if (Any(ret))
+				return null;
+			var args = new object[] { owner };
+			return _member.Method.Invoke(null, args);
+		}
+
+		public override bool TryPreEvaluate(out ExpressionNode result, out ReturnCode ret)
+		{
+			_isPreEvaluating = true;
+			ret = ReturnCode.Success;
+			result = this;
+
+			if (_owner.TryPreEvaluate(out _owner, out ReturnCode ret_a))
+			{
+				object res = Execute(out ret);
+				if (Any(ret))
+					return false;
+				result = new ConstantValue(_script, res);
+				return true;
+			}
+			ret = ret_a;
+			_isPreEvaluating = false;
+			return Any(ret);
+		}
+
+		protected override float GetComplexity() => 0;
+
+		public override string ToString() => $"property (({_owner}) . ({_member})";
+	}
+
 	public sealed class Assignment : CodeNode
 	{
 		private OperatorType _operation;
