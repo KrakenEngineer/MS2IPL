@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace MS2IPL
 {
@@ -61,7 +63,9 @@ namespace MS2IPL
 				case TokenType.Type:
 					return ParseDeclaration(tokens, 0, tokens.Length - 1);
 				case TokenType.Variable:
-					return ParseAssignment(tokens, 0, tokens.Length - 1);
+					if (FindAssignmentOperator(tokens, 0, tokens.Length - 1).Item2 != -1)
+						return ParseAssignment(tokens, 0, tokens.Length - 1);
+					return ParseExpression(tokens, 0, tokens.Length - 1);
 				default:
 					return Error<CodeNode>($"The line\n{s_line}\nnumber {s_lineIndex} cannot start with {tokens[0]} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseLine)}");
 			}
@@ -127,7 +131,7 @@ namespace MS2IPL
 					return @while;
 
 				case StatementType.@for:
-					int[] semicolons = FindSemicolons(tokens);
+					int[] semicolons = FindOptokens(tokens, start, end, OperatorType.Sep);
 					if (semicolons.Length == 0 || semicolons.Length > 2)
 						return Error<CodeNode>($"for in the line\n{s_line}\nnumber {s_lineIndex} cannot have {semicolons.Length} semicolons at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}");
 					
@@ -170,15 +174,6 @@ namespace MS2IPL
 				default:
 					return Error<CodeNode>($"Unknown statement type for token {statement} for line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseStatement)}");
 			}
-		}
-
-		private static int[] FindSemicolons(Token[] tokens)
-		{
-			var ret = new List<int>();
-			for (int i = 0; i < tokens.Length; i++)
-				if (tokens[i] is OperatorToken op && op.Type == OperatorType.Sep)
-					ret.Add(i);
-			return ret.ToArray();
 		}
 
 		private static Switch ParseSwitch(Token[] tokens)
@@ -517,7 +512,102 @@ namespace MS2IPL
 					return Error<ExpressionNode>($"Property {m.Name} doesn't exist in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseDotOperator)}");
 				return new PropertyNode(s_currentScript, owner, p);
 			}
-			throw new NotImplementedException();
+			return ParseFunction(tokens, start, end, m, owner);
+		}
+
+		private static ExpressionNode ParseFunction(Token[] tokens, int start, int end, MemberToken m, ExpressionNode owner = null)
+		{
+			(int, int) brackets = FindBrackets(tokens, start, end, BracketType.Regular);
+			if (brackets.Item1 == start || brackets.Item2 != end)
+				return Error<ExpressionNode>($"Invalid brackets for a {(owner == null ? "function" : "method")} in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseFunction)}");
+			ExpressionNode[] parameters;
+			if (brackets.Item1 + 1 == brackets.Item2)
+				parameters = Array.Empty<ExpressionNode>();
+			if (!MemberCollection.TryFindMember(owner.ReturnType, m.Name, out Member mem) || mem is not IFunction f)
+				return Error<ExpressionNode>($"IFunction {m.Name} doesn't exist in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseFunction)}");
+			else
+			{
+				int[] commas = FindOptokens(tokens, start + 1, end - 1, OperatorType.Sep);
+				if (commas.Length == 0)
+					parameters = new ExpressionNode[1] { ParseExpression_(tokens, brackets.Item1 + 1, end - 1) };
+				else
+				{
+					parameters = new ExpressionNode[commas.Length];
+					parameters[0] = ParseExpression_(tokens, brackets.Item1 + 1, commas[0] - 1);
+					parameters[^1] = ParseExpression_(tokens, commas[^1] + 1, end - 1);
+					for (int i = 0; i < commas.Length - 1; i++)
+						parameters[i] = ParseExpression_(tokens, commas[i] + 1, commas[i + 1] - 1);
+				}
+				if (InvalidParameters(f, parameters, out string error))
+					return Error<ExpressionNode>(error);
+			}
+
+			if (owner == null)
+				throw new NotImplementedException();
+			if (f is not Method mt)
+				return Error<ExpressionNode>($"Method {m.Name} doesn't exist in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(ParseFunction)}");
+			return new MethodNode(s_currentScript, owner, parameters, mt);
+		}
+
+		private static bool InvalidParameters(IFunction f, ExpressionNode[] pars, out string error)
+		{
+			Parameter[] parameters = f.Parameters;
+			if (parameters.Length != pars.Length)
+			{
+				error = $"Invalid parameter count {pars.Length} instead of {parameters.Length} in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(InvalidParameters)}";
+				return true;
+			}
+
+			for (int i = 0; i < pars.Length; i++)
+			{
+				if (parameters[i].Type != TypeNode.Object && parameters[i].Type != pars[i].ReturnType)
+				{
+					error = $"Invalid parameter type of {parameters[i]}: {pars[i].ReturnType} instead of {parameters[i].Type} in the line\n{s_line}\nnumber {s_lineIndex} at {nameof(MS2IPL)}.{nameof(Parser)}.{nameof(InvalidParameters)}";
+					return true;
+				}
+			}
+			error = "";
+			return false;
+		}
+
+		private static (int, int) FindBrackets(Token[] tokens, int start, int end, BracketType type)
+		{
+			int a = -1, b = -1;
+			int brackets = 0;
+
+			for (int i = start; i <= end; i++)
+			{
+				if (tokens[i] is not BracketToken bracket)
+					continue;
+
+				if (bracket.Closing)
+				{
+					brackets--;
+					if (brackets == 0 && bracket.Type == type && b == -1)
+						b = i;
+					continue;
+				}
+
+				if (brackets == 0 && bracket.Type == type && a == -1)
+					a = i;
+				brackets++;
+			}
+
+			return (a, b);
+		}
+
+		private static int[] FindOptokens(Token[] tokens, int start, int end, OperatorType t)
+		{
+			int brackets = 0;
+			var ret = new List<int>();
+			for (int i = start; i < end + 1; i++)
+			{
+				if (tokens[i] is BracketToken b)
+					brackets += b.Closing ? -1 : 1;
+				else if (brackets == 0 && tokens[i] is OperatorToken op && op.Type == t)
+					ret.Add(i);
+			}
+			return ret.ToArray();
 		}
 
 		private static (OperatorToken, int) FindOperator(Token[] tokens, int start, int end, out bool error)

@@ -122,6 +122,7 @@ namespace MS2IPL
 			Log(MessageType.Warning);
 			Log(MessageType.RuntimeError);
 			Log(MessageType.UserOutput);
+			Log(MessageType.cow);
 		}
 
 		private static void Log(MessageType t)
@@ -141,6 +142,7 @@ namespace MS2IPL
 			LogAll(MessageType.Warning);
 			LogAll(MessageType.RuntimeError);
 			LogAll(MessageType.UserOutput);
+			LogAll(MessageType.cow);
 		}
 
 		private static void LogAll(MessageType t)
@@ -166,6 +168,7 @@ namespace MS2IPL
 				MessageType.Warning => "warning",
 				MessageType.RuntimeError => "runtime error",
 				MessageType.UserOutput => "user output",
+				MessageType.cow => "the cow statue says",
 				_ => "unknown message type"
 			} + ":\n{\n" + message + "\n}\n\n";
 		}
@@ -177,7 +180,8 @@ namespace MS2IPL
 			SyntaxError,
 			Warning,
 			RuntimeError,
-			UserOutput
+			UserOutput,
+			cow
 		}
 	}
 }

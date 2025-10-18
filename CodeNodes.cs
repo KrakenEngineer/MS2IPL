@@ -654,7 +654,10 @@ namespace MS2IPL
 			if (Any(ret))
 				return null;
 			var args = new object[] { owner };
-			return _member.Method.Invoke(null, args);
+			object result = _member.RealMethod.Invoke(null, args);
+			if (result is ReturnCode r && r == ReturnCode.Error)
+				ret |= ReturnCode.Error;
+			return result;
 		}
 
 		public override bool TryPreEvaluate(out ExpressionNode result, out ReturnCode ret)
@@ -678,7 +681,87 @@ namespace MS2IPL
 
 		protected override float GetComplexity() => 0;
 
-		public override string ToString() => $"property (({_owner}) . ({_member})";
+		public override string ToString() => $"property (({_owner}) . ({_member}))";
+	}
+
+	public sealed class MethodNode : MemberNode<Method>
+	{
+		private readonly ExpressionNode[] _parameters;
+
+		public MethodNode(Script s, ExpressionNode owner, ExpressionNode[] parameters, Method m)
+		{
+			base.CompleteConstruction(s);
+			_owner = owner;
+			_parameters = parameters;
+			_member = m;
+			_returnType = GetReturnType();
+		}
+
+		public override object Execute(out ReturnCode ret)
+		{
+			if (!_isPreEvaluating)
+				AcceptExecution();
+			object owner = _owner.Execute(out ret);
+			if (Any(ret))
+				return null;
+			var args = new object[_parameters.Length + 1];
+			args[0] = owner;
+			for (int i = 1; i <= _parameters.Length; i++)
+			{
+				args[i] = _parameters[i - 1].Execute(out ret);
+				if (args[i] is ReturnCode r1 && r1 == ReturnCode.Error)
+					ret |= ReturnCode.Error;
+				if (Any(ret))
+					return null;
+			}
+			object result = _member.RealMethod.Invoke(null, args);
+			if (result is ReturnCode r && r == ReturnCode.Error)
+				ret |= ReturnCode.Error;
+			return result;
+		}
+
+		public override bool TryPreEvaluate(out ExpressionNode result, out ReturnCode ret)
+		{
+			_isPreEvaluating = true;
+			ret = ReturnCode.Success;
+			result = this;
+
+			bool preev = _owner.TryPreEvaluate(out _owner, out ret);
+			preev &= !Any(ret);
+			var args = new object[_parameters.Length + 1];
+			if (!Any(ret))
+				args[0] = _owner.Execute(out ret);
+
+			for (int i = 0; i < _parameters.Length; i++)
+			{
+				preev &= _parameters[i].TryPreEvaluate(out _parameters[i], out ret);
+				preev &= !Any(ret);
+				if (!Any(ret))
+					args[i + 1] = _parameters[i].Execute(out ret);
+			}
+
+			if (preev)
+			{
+				object res = Execute(out ret);
+				if (Any(ret))
+					return false;
+				result = new ConstantValue(_script, res);
+				return true;
+			}
+
+			_isPreEvaluating = false;
+			return Any(ret);
+		}
+
+		protected override float GetComplexity() => 0;
+
+		public override string ToString()
+		{
+			string s = $"method (({_owner}) . ({_member})\nparameters{{";
+			for (int i = 0; i<_parameters.Length; i++)
+				s += _parameters[i].ToString() + " ";
+			return s + " })";
+		}
 	}
 
 	public sealed class Assignment : CodeNode
@@ -1130,12 +1213,12 @@ namespace MS2IPL
 				ret &= (ReturnCode)(255 - (byte)ReturnCode.Continue);
 				if (Any(ret))
 					return null;
-
-				cond = _condition.Execute(out ret);
+				
+				_endAssignment.Execute(out ret);
 				if (Any(ret))
 					return null;
 
-				_endAssignment.Execute(out ret);
+				cond = _condition.Execute(out ret);
 				if (Any(ret))
 					return null;
 			}

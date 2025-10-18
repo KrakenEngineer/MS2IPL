@@ -38,7 +38,7 @@ namespace MS2IPL
 
 				{ OperatorType.Char, new OperatorData("\\$", OperatorType.Char, false) },
 				{ OperatorType.Assign, new OperatorData("={1,2}", OperatorType.Assign, false) },
-				{ OperatorType.Sep, new OperatorData(";", OperatorType.Sep, false) },
+				{ OperatorType.Sep, new OperatorData(",", OperatorType.Sep, false) },
 				{ OperatorType.None, new OperatorData("(\\*{3,})|(\\/{3,})|(\\|{3,})|(\\&{3,})|(={3,})", OperatorType.None, false) }
 			};
 

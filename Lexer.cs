@@ -34,7 +34,7 @@ namespace MS2IPL
 			{ "==", OperatorType.Eq },
 			{ "$", OperatorType.Char },
 			{ "=", OperatorType.Assign },
-			{ ";", OperatorType.Sep }
+			{ ",", OperatorType.Sep }
 		};
 
 		#region Regular expression patterns
