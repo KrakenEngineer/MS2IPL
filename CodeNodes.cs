@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace MS2IPL
 {
@@ -194,10 +195,9 @@ namespace MS2IPL
 	{
 		protected OperatorType _operation;
 		public OperatorType Operation => _operation;
-		protected abstract void HandleTypeDepended();
 
 		public static bool IsUnary(OperatorType t) => t == OperatorType.Neg || t == OperatorType.Not || t == OperatorType.Char ||
-			t == OperatorType.ChCode;
+			t == OperatorType.ChCode || t == OperatorType.Vneg;
 		public static bool IsBinary(OperatorType t) => t != OperatorType.None && t != OperatorType.Sep &&
 			!IsUnary(t) && !IsTernary(t);
 		public static bool IsTernary(OperatorType t) => t == OperatorType.Ter1;
@@ -207,6 +207,7 @@ namespace MS2IPL
 		public static bool IsRelational(OperatorType t) => OperatorType.Less <= t && t <= OperatorType.NotEq;
 		public static bool IsNumberRelational(OperatorType t) => OperatorType.Less <= t && t <= OperatorType.GreaterEq;
 		public static bool IsStringy(OperatorType t) => OperatorType.Concat <= t && t <= OperatorType.ChCode;
+		public static bool IsVectorish(OperatorType t) => OperatorType.Vadd <= t && t <= OperatorType.DotProduct;
 	}
 
 	public sealed class UnaryOperator : Operator
@@ -245,6 +246,7 @@ namespace MS2IPL
 				OperatorType.Not => !(bool)arg,
 				OperatorType.Neg => _arg.ReturnType == TypeNode.Int ? -(long)arg : -(decimal)arg,
 				OperatorType.Char => $"{(char)(long)arg}",
+				OperatorType.Vneg => -(Vector2)arg,
 				_ => null
 			};
 		}
@@ -281,7 +283,7 @@ namespace MS2IPL
 		protected override void CompleteConstruction(Script s)
 		{
 			base.CompleteConstruction(s);
-			HandleTypeDepended();
+			HandleTypeDepended(_arg.ReturnType, ref _operation);
 			_returnType = GetReturnType();
 			if (_returnType == null)
 				throw new Exception($"Invalid argument {_arg.ToString()}" +
@@ -292,12 +294,14 @@ namespace MS2IPL
 		{
 			if (_operation == OperatorType.Not)
 				return _arg.ReturnType == TypeNode.Bool ? TypeNode.Bool : null;
-			if (_operation == OperatorType.Neg)
+			else if (_operation == OperatorType.Neg)
 				return _arg.ReturnType.IsNum ? _arg.ReturnType : null;
-			if (_operation == OperatorType.Char)
+			else if (_operation == OperatorType.Char)
 				return _arg.ReturnType == TypeNode.Int ? TypeNode.String : null;
-			if (_operation == OperatorType.ChCode)
+			else if (_operation == OperatorType.ChCode)
 				return _arg.ReturnType == TypeNode.String ? TypeNode.Int : null;
+			else if (_operation == OperatorType.Vneg)
+				return _arg.ReturnType == TypeNode.Vector2 ? TypeNode.Vector2 : null;
 			return null;
 		}
 
@@ -305,10 +309,12 @@ namespace MS2IPL
 
 		public override string ToString() => $"unary (type: {_operation} arg: {_arg})";
 
-		protected override void HandleTypeDepended()
+		public static void HandleTypeDepended(TypeNode argtype, ref OperatorType operation)
 		{
-			if (_operation == OperatorType.Char && _arg.ReturnType == TypeNode.String)
-				_operation = OperatorType.ChCode;
+			if (operation == OperatorType.Char && argtype == TypeNode.String)
+				operation =  OperatorType.ChCode;
+			else if (operation == OperatorType.Neg &&  argtype == TypeNode.Vector2)
+				operation = OperatorType.Vneg;
 		}
 	}
 
@@ -348,12 +354,14 @@ namespace MS2IPL
 
 			if (IsArithmetic(_operation))
 				return EvaluateArithmetic(left, right, _operation, ReturnType == TypeNode.Int, _script.Line, out ret);
-			if (IsLogical(_operation))
+			else if (IsLogical(_operation))
 				return EvaluateLogical((bool)left, (bool)right, _operation);
-			if (IsRelational(_operation))
+			else if (IsRelational(_operation))
 				return EvaluateRelational(left, right, _operation);
-			if (IsStringy(_operation))
+			else if (IsStringy(_operation))
 				return EvaluateStringy(left, right, _operation);
+			else if (IsVectorish(_operation))
+				return EvaluateVectorish(left, right, _script.Line, _operation);
 			return null;
 		}
 
@@ -451,10 +459,35 @@ namespace MS2IPL
 			};
 		}
 
+		public static object EvaluateVectorish(object left, object right, int curline, OperatorType opcode)
+		{
+			var leftv = (Vector2)left;
+			if (opcode == OperatorType.Vdiv)
+			{
+				float rightf = right is long righti ? righti : (float)right;
+				if (rightf == 0)
+					return Error($"Cannot divide vector {leftv} by 0 in the line number {curline} in {nameof(MS2IPL)}.{nameof(BinaryOperator)}.{nameof(EvaluateVectorish)}");
+				return leftv / (float)rightf;
+			}
+			else if (opcode == OperatorType.Vmul)
+			{
+				float rightf = right is long righti ? righti : (float)right;
+				return leftv * (float)rightf;
+			}
+			var rightv = (Vector2)right;
+			return opcode switch
+			{
+				OperatorType.Vadd => leftv + rightv,
+				OperatorType.Vsub => leftv - rightv,
+				OperatorType.DotProduct => leftv * rightv,
+				_ => new Vector2()
+			};
+		}
+
 		protected override void CompleteConstruction(Script s)
 		{
 			base.CompleteConstruction(s);
-			HandleTypeDepended();
+			HandleTypeDepended(_left.ReturnType, _right.ReturnType, ref _operation);
 			_returnType = GetReturnType();
 			if (_returnType == null)
 				throw new Exception($"Invalid arguments {_left.ToString()} {_right.ToString()} " +
@@ -495,22 +528,29 @@ namespace MS2IPL
 					return TypeNode.Int;
 				return _left.ReturnType == TypeNode.Float || _right.ReturnType == TypeNode.Float ? TypeNode.Float : TypeNode.Int;
 			}
-			if (IsLogical(_operation))
+			else if (IsLogical(_operation))
 				return _left.ReturnType == TypeNode.Bool && _right.ReturnType == TypeNode.Bool ? TypeNode.Bool : null;
-			if (IsRelational(_operation))
+			else if (IsRelational(_operation))
 			{
 				if (IsNumberRelational(_operation))
 					return _left.ReturnType.IsNum && _right.ReturnType.IsNum ? TypeNode.Bool : null;
 				return _left.ReturnType == _right.ReturnType || (_left.ReturnType.IsNum && _right.ReturnType.IsNum) ?
 					TypeNode.Bool : null;
 			}
-			if (IsStringy(_operation)) {
+			else if (IsStringy(_operation)) {
 				return _operation == OperatorType.Concat ?
 					(_left.ReturnType == TypeNode.String || _right.ReturnType == TypeNode.String ? TypeNode.String : null) :
 					_operation == OperatorType.StrMul ?
 					(_left.ReturnType == TypeNode.String && _right.ReturnType == TypeNode.Int ?
 					TypeNode.String : null) : null; }
-			if (_operation == OperatorType.Ter2)
+			else if (IsVectorish(_operation)) {
+				if (_left.ReturnType != TypeNode.Vector2)
+					return null;
+				else if (_operation == OperatorType.Vmul || _operation == OperatorType.Vdiv)
+					return _right.ReturnType.IsNum ? TypeNode.Vector2 : null;
+				else return _right.ReturnType == TypeNode.Vector2 ? TypeNode.Vector2 : null;
+			}
+			else if (_operation == OperatorType.Ter2)
 				return _left.ReturnType == _right.ReturnType ? _left.ReturnType : null;
 			return null;
 		}
@@ -519,12 +559,24 @@ namespace MS2IPL
 
 		public override string ToString() => $"binary (type: {_operation} left: {_left} right: {_right})";
 
-		protected override void HandleTypeDepended()
+		public static void HandleTypeDepended(TypeNode lt, TypeNode rt, ref OperatorType operation)
 		{
-			if (_operation == OperatorType.Mul && _left.ReturnType == TypeNode.String)
-				_operation = OperatorType.StrMul;
-			else if (_operation == OperatorType.Add && (_left.ReturnType == TypeNode.String || _right.ReturnType == TypeNode.String))
-				_operation = OperatorType.Concat;
+			if (operation == OperatorType.Mul && lt == TypeNode.String)
+				operation = OperatorType.StrMul;
+			else if (operation == OperatorType.Add && (lt == TypeNode.String || rt == TypeNode.String))
+				operation = OperatorType.Concat;
+			else if (lt == TypeNode.Vector2)
+			{
+				if (operation == OperatorType.Mul && rt == TypeNode.Vector2)
+					operation = OperatorType.DotProduct;
+				else operation = operation switch
+				{
+					OperatorType.Add => OperatorType.Vadd,
+					OperatorType.Sub => OperatorType.Vsub,
+					OperatorType.Mul => OperatorType.Vmul,
+					OperatorType.Div => OperatorType.Vdiv,
+				};
+			}
 		}
 	}
 
@@ -625,7 +677,6 @@ namespace MS2IPL
 		protected override float GetComplexity() => 0;
 
 		public override string ToString() => $"ternary ({_condition} ? {_true} : {_false})";
-		protected override void HandleTypeDepended() { }
 	}
 
 	public abstract class MemberNode<T> : ExpressionNode where T : Member
@@ -634,6 +685,86 @@ namespace MS2IPL
 		protected T _member;
 
 		public override TypeNode GetReturnType() => _member.ReturnType;
+	}
+
+	public sealed class ConstructorNode : ExpressionNode
+	{
+		private readonly Constructor _constructor;
+		private readonly ExpressionNode[] _parameters;
+
+		public ConstructorNode(Script s, Constructor constructor, ExpressionNode[] parameters)
+		{
+			_constructor = constructor;
+			_parameters = parameters;
+			_returnType = GetReturnType();
+			base.CompleteConstruction(s);
+		}
+
+		public override object Execute(out ReturnCode ret)
+		{
+			if (!_isPreEvaluating)
+				AcceptExecution();
+			ret = ReturnCode.Success;
+			var args = new object[_parameters.Length];
+
+			for (int i = 0; i < _parameters.Length; i++)
+			{
+				args[i] = _parameters[i].Execute(out ret);
+				if (args[i] is ReturnCode r1 && r1 == ReturnCode.Error)
+					ret |= ReturnCode.Error;
+				if (Any(ret))
+					return null;
+			}
+			CheckTypes(args);
+
+			object result = _constructor.RealConstructor.Invoke(args);
+			if (result is ReturnCode r && r == ReturnCode.Error)
+				ret |= ReturnCode.Error;
+			//Console.WriteLine(result);
+			return result;
+		}
+
+		public override bool TryPreEvaluate(out ExpressionNode result, out ReturnCode ret)
+		{
+			_isPreEvaluating = true;
+			result = this;
+			bool preev = true;
+			ret = ReturnCode.Success;
+
+			for (int i = 0; i < _parameters.Length; i++)
+			{
+				preev &= _parameters[i].TryPreEvaluate(out _parameters[i], out ret);
+				preev &= !Any(ret);
+			}
+
+			_isPreEvaluating = false;
+			return !Any(ret);
+		}
+
+		private void CheckTypes(object[] args)
+		{
+			ParameterInfo[] realArgs = _constructor.RealConstructor.GetParameters();
+			for (int i = 0; i < args.Length; i++)
+			{
+				if (args[i] is decimal d && realArgs[i].ParameterType == typeof(float))
+					args[i] = Convert.ToSingle(d);
+				if (args[i] is long l && realArgs[i].ParameterType == typeof(int))
+					args[i] = Convert.ToInt32(i);
+				//Console.WriteLine(args[i]);
+			}
+		}
+
+		protected override float GetComplexity() => 0;
+
+		public override TypeNode GetReturnType() => _constructor.ReturnType;
+
+		public override string ToString()
+		{
+			string s = $"constructor ({_constructor})\nparameters{{";
+			for (int i = 0; i < _parameters.Length; i++)
+				s += _parameters[i].ToString() + " ";
+			return s + " })";
+		}
 	}
 
 	public sealed class PropertyNode : MemberNode<Property>
@@ -701,9 +832,11 @@ namespace MS2IPL
 		{
 			if (!_isPreEvaluating)
 				AcceptExecution();
+
 			object owner = _owner.Execute(out ret);
 			if (Any(ret))
 				return null;
+
 			var args = new object[_parameters.Length + 1];
 			args[0] = owner;
 			for (int i = 1; i <= _parameters.Length; i++)
@@ -714,6 +847,7 @@ namespace MS2IPL
 				if (Any(ret))
 					return null;
 			}
+
 			object result = _member.RealMethod.Invoke(null, args);
 			if (result is ReturnCode r && r == ReturnCode.Error)
 				ret |= ReturnCode.Error;
@@ -801,11 +935,13 @@ namespace MS2IPL
 
 			if (Operator.IsArithmetic(_operation))
 				right = BinaryOperator.EvaluateArithmetic(left, right, _operation, _lvalue.ReturnType == TypeNode.Int, _script.Line, out ret);
-			if (Operator.IsLogical(_operation))
+			else if (Operator.IsLogical(_operation))
 				right = BinaryOperator.EvaluateLogical((bool)left, (bool)right, _operation);
-			if (right is decimal && _lvalue.ReturnType == TypeNode.Int)
+			else if (Operator.IsVectorish(_operation))
+				right = BinaryOperator.EvaluateVectorish(left, right, _script.Line, _operation);
+			else if (right is decimal && _lvalue.ReturnType == TypeNode.Int)
 				right = (long)(decimal)right;
-			if (right is long && _lvalue.ReturnType == TypeNode.Float)
+			else if (right is long && _lvalue.ReturnType == TypeNode.Float)
 				right = (decimal)(long)right;
 
 			if (Any(ret))
@@ -839,6 +975,7 @@ namespace MS2IPL
 		protected override void CompleteConstruction(Script s)
 		{
 			base.CompleteConstruction(s);
+			BinaryOperator.HandleTypeDepended(_lvalue.ReturnType, _rvalue.ReturnType, ref _operation);
 			TypeNode returnType = GetReturnType();
 			if (returnType == null)
 				throw new Exception($"Invalid arguments {_lvalue.ToString()} {_rvalue.ToString()} " +
@@ -854,7 +991,7 @@ namespace MS2IPL
 					return _rvalue.ReturnType == TypeNode.Int || _rvalue.ReturnType == TypeNode.Float ? TypeNode.Int : null;
 				return _lvalue.ReturnType == _rvalue.ReturnType ? _lvalue.ReturnType : _rvalue.ReturnType;
 			}
-			if (Operator.IsArithmetic(_operation))
+			else if (Operator.IsArithmetic(_operation))
 			{
 				if (!(_lvalue.ReturnType.IsNum && _rvalue.ReturnType.IsNum))
 					return null;
@@ -864,39 +1001,22 @@ namespace MS2IPL
 					return TypeNode.Int;
 				return _lvalue.ReturnType == TypeNode.Float || _rvalue.ReturnType == TypeNode.Float ? TypeNode.Float : TypeNode.Int;
 			}
-			if (Operator.IsLogical(_operation))
+			else if (Operator.IsLogical(_operation))
 				return _lvalue.ReturnType == TypeNode.Bool && _rvalue.ReturnType == TypeNode.Bool ? TypeNode.Bool : null;
+			else if (Operator.IsVectorish(_operation))
+			{
+				if (_lvalue.ReturnType != TypeNode.Vector2)
+					return null;
+				else if (_operation == OperatorType.Vmul || _operation == OperatorType.Vdiv)
+					return _rvalue.ReturnType.IsNum ? TypeNode.Vector2 : null;
+				else return _rvalue.ReturnType == TypeNode.Vector2 ? TypeNode.Vector2 : null;
+			}
 			return null;
 		}
 
 		protected override float GetComplexity() => 0;
 
 		public override string ToString() => $"Assignment (lvalue: {_lvalue} operation: {_operation} rvalue: {_rvalue})";
-	}
-
-	public sealed class PRINT : Statement
-	{
-		private static bool s_printExp = false;
-		private ExpressionNode _expression;
-		public override StatementType StatementType => StatementType.PRINT;
-
-		public PRINT(ExpressionNode expression)
-		{
-			if (expression == null)
-				throw new ArgumentNullException();
-			_expression = expression;
-		}
-
-		public override object Execute(out ReturnCode ret)
-		{
-			object res = _expression.Execute(out ret);
-			Logger.AddMessage(s_printExp ? _expression+" value " : "" + $"{res}", Logger.MessageType.UserOutput);
-			return null;
-		}
-
-		protected override float GetComplexity() => 0;
-
-		public override string ToString() => $"PRINT ({_expression})";
 	}
 
 	public sealed class SingletoneStatement : Statement

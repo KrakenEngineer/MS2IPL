@@ -159,7 +159,7 @@ namespace MS2IPL
 
 	public enum StatementType : byte
 	{
-		none, cls, PRINT,
+		none, cls,
 		ifelse, @if, elif, @else,
 		@switch, @case, @default,
 		@while, always, @for, @break, @continue

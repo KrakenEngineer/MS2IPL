@@ -77,6 +77,7 @@ namespace MS2IPL
 		Not, Or, Or2, And, And2, Xor,
 		Less, LessEq, Greater, GreaterEq, Eq, NotEq,
 		Concat, StrMul, Char, ChCode,
+		Vadd, Vsub, Vneg, Vmul, Vdiv, DotProduct,
 		Assign,
 		Sep
 	}

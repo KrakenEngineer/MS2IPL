@@ -142,4 +142,36 @@ namespace MS2IPL
 			Logger.AddMessage("moooooo", Logger.MessageType.cow);
 		#endregion
 	}
+
+	public struct Vector2
+	{
+		public float x;
+		public float y;
+
+		[PLConstructor]
+		public Vector2() => new Vector2(0, 0);
+		[PLConstructor]
+		public Vector2(float X, float Y)
+		{
+			x = X;
+			y = Y;
+		}
+
+		public static Vector2 operator +(Vector2 v1, Vector2 v2) => new Vector2(v1.x + v2.x, v1.y + v2.y);
+		public static Vector2 operator -(Vector2 v1, Vector2 v2) => new Vector2(v1.x - v2.x, v1.y - v2.y);
+		public static Vector2 operator -(Vector2 v) => new Vector2(-v.x, -v.y);
+		public static Vector2 operator *(Vector2 v, float f) => new Vector2(v.x * f, v.y * f);
+		public static Vector2 operator /(Vector2 v, float f) => new Vector2(v.x / f, v.y / f);
+		public static bool operator ==(Vector2 v1, Vector2 v2) => v1.x == v2.x && v1.y == v2.y;
+		public static bool operator !=(Vector2 v1, Vector2 v2) => !(v1 == v2);
+		public static float operator *(Vector2 v1, Vector2 v2) => v1.x * v2.x + v1.y * v2.y;
+
+		public float sqrMagnitude => x * x + y * y;
+		public float magnitude => MathF.Sqrt(sqrMagnitude);
+		public Vector2 normalized => magnitude > 1E-5 ? this / magnitude : new Vector2();
+		public Vector2 perpendicular => new Vector2(-y, x);
+
+		public override bool Equals(object? obj) => obj is Vector2 v && this == v;
+		public override string ToString() => $"vector2({x}, {y})";
+	}
 }

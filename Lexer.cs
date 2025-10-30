@@ -383,7 +383,6 @@ namespace MS2IPL
 			{
 				"True" => new ValueToken(true),
 				"False" => new ValueToken(false),
-				"PRINT" => new StatementToken(StatementType.PRINT),
 				"cls" => new StatementToken(StatementType.cls),
 
 				"if" => new StatementToken(StatementType.@if),

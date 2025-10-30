@@ -15,27 +15,43 @@ namespace MS2IPL
 		{
 			var sets1 = typeof(MemberCollection).Assembly.GetTypes().Where(t => !t.IsDefined(typeof(PLIgnore)));
 			var sets2 = sets1.Select(t => t.GetMethods().
-				Where(m => m.IsDefined(typeof(BringToPL)) && m.IsStatic && m.GetParameters().Length > 0));
-			var sets3 = sets2.Where(m => m.Count() > 0);
-			var sets4 = sets3.Select(m1 => m1.Select(m => Member.Create(m)));
+				Where(m => m.IsDefined(typeof(BringToPL)) && m.IsStatic && m.GetParameters().Length > 0)).
+				Where(m => m.Any()).Select(m => m.Select(m => FunctionalMember.Create(m)));
 
 			var dict = new Dictionary<TypeNode, MemberSet>();
-			foreach (var set in sets4)
-			{
+			foreach (var set in sets2)
 				foreach (var member in set)
 				{
 					if (!dict.ContainsKey(member.OwnerType))
 						dict.Add(member.OwnerType, new MemberSet());
 					dict[member.OwnerType].Add(member);
 				}
-			}
+
+			var sets3 = sets1.Select(t => t.GetConstructors().Where(c => c.IsDefined(typeof(PLConstructor)))).
+				Where(c => c.Any()).Select(c => c.Select(c => new Constructor(c)));
+			foreach (var set in sets3)
+				foreach (var member in set)
+				{
+					if (!dict.ContainsKey(member.OwnerType))
+						dict.Add(member.OwnerType, new MemberSet());
+					dict[member.OwnerType].Add(member);
+				}
+
 			return dict;
 		}
 
-		public static bool TryFindMember(TypeNode ownerType, string name, out Member m)
+		public static bool TryFindConstructor(TypeNode ownerType, ExpressionNode[] args, out Constructor c)
 		{
 			if (_sets.ContainsKey(ownerType))
-				return _sets[ownerType].FindMember(name, out m);
+				return _sets[ownerType].TryFindConstructor(args, out c);
+			c = null;
+			return false;
+		}
+
+		public static bool TryFindMember(TypeNode ownerType, string name, out FunctionalMember m)
+		{
+			if (_sets.ContainsKey(ownerType))
+				return _sets[ownerType].TryFindMember(name, out m);
 			m = null;
 			return false;
 		}
@@ -51,7 +67,8 @@ namespace MS2IPL
 
 	public sealed class MemberSet
 	{
-		private readonly Dictionary<string, Member> _members = new Dictionary<string, Member>();
+		private readonly Dictionary<string, FunctionalMember> _members = new Dictionary<string, FunctionalMember>();
+		private readonly List<Constructor> _constructors = new List<Constructor>();
 
 		public MemberSet() { }
 
@@ -63,9 +80,36 @@ namespace MS2IPL
 
 		public bool Empty => _members.Count == 0;
 
-		public void Add(Member m) => _members.Add(m.RealMethod.Name, m);
+		public void Add(Member m)
+		{
+			if (m is FunctionalMember f)
+				_members.Add(f.RealMethod.Name, f);
+			else _constructors.Add((Constructor)m);
+		}
 
-		public bool FindMember(string name, out Member m)
+		public bool TryFindConstructor(ExpressionNode[] args, out Constructor ret)
+		{
+			var constructors = _constructors.Where(c => c.Parameters.Length == args.Length);
+			foreach (var c in constructors)
+			{
+				bool match = true;
+				for (int i = 0; i < args.Length; i++)
+					if (args[i].ReturnType != c.Parameters[i].Type)
+					{
+						match = false;
+						break;
+					}
+				if (match)
+				{
+					ret = c;
+					return true;
+				}
+			}
+			ret = null;
+			return false;
+		}
+
+		public bool TryFindMember(string name, out FunctionalMember m)
 		{
 			m = _members?[name];
 			return m != null;
@@ -76,6 +120,8 @@ namespace MS2IPL
 			string s = "member set [\n";
 			foreach (var members in _members)
 				s += members.ToString() + '\n';
+			foreach (var member in _constructors)
+				s += member.ToString() + "\n";
 			return s + "]";
 		}
 	}
@@ -84,6 +130,55 @@ namespace MS2IPL
 	{
 		public abstract TypeNode OwnerType { get; }
 		public abstract TypeNode ReturnType { get; }
+		public abstract override string ToString();
+	}
+
+	public sealed class Constructor : Member, IParameters
+	{
+		public override TypeNode OwnerType => _ownerType;
+		public override TypeNode ReturnType => _ownerType;
+		public ConstructorInfo RealConstructor => _realConstructor;
+		public Parameter[] Parameters => _parameters;
+
+		private readonly TypeNode _ownerType;
+		private readonly ConstructorInfo _realConstructor;
+
+		private readonly Parameter[] _parameters;
+
+		internal Constructor(ConstructorInfo c)
+		{
+			_realConstructor = c;
+			ParameterInfo[] realParams = c.GetParameters();
+			_parameters = new Parameter[realParams.Length];
+			for (int i = 0; i < realParams.Length; i++)
+			{
+				ParameterInfo p = realParams[i];
+				var attributes = p.Attributes == ParameterAttributes.Out;
+				_parameters[i] = new Parameter(TypeSystem.TypeOf(p.ParameterType), p.Name, attributes);
+			}
+			_ownerType = TypeSystem.TypeOf(c.DeclaringType);
+		}
+
+		private Constructor(TypeNode ownerType, ConstructorInfo realConstructor, Parameter[] parameters)
+		{
+			_ownerType = ownerType;
+			_realConstructor = realConstructor;
+			_parameters = parameters;
+		}
+
+		protected TypeNode GetReturnType() => OwnerType;
+
+		public override string ToString()
+		{
+			string s = $"constructor (for: {_ownerType}\nparameters:";
+			for (int i = 0; i < _parameters.Length; i++)
+				s += "\n" + _parameters[i];
+			return s + ')';
+		}
+	}
+
+	public abstract class FunctionalMember : Member
+	{
 		public abstract MethodInfo RealMethod { get; }
 
 		public static Member Create(MethodInfo m)
@@ -109,11 +204,9 @@ namespace MS2IPL
 		}
 
 		protected TypeNode GetReturnType() => TypeSystem.TypeOf(RealMethod.ReturnType);
-
-		public abstract override string ToString();
 	}
 
-	public sealed class Property : Member
+	public sealed class Property : FunctionalMember
 	{
 		public override TypeNode OwnerType => _ownerType;
 		public override MethodInfo RealMethod => _realMethod;
@@ -131,41 +224,44 @@ namespace MS2IPL
 			_returnType = returnType == null ? GetReturnType() : returnType;
 		}
 
-		public override string ToString() => $"property (for: {OwnerType} real method: {RealMethod} returns {ReturnType})";
+		public override string ToString() => $"property (for: {_ownerType} real method: {_realMethod} returns {_returnType})";
 	}
 
-	public interface IFunction
+	public interface IParameters
 	{
 		public abstract TypeNode ReturnType { get; }
-		public abstract MethodInfo RealMethod { get; }
 		public Parameter[] Parameters { get; }
+	}
 
+	public interface IFunction : IParameters
+	{
+		public abstract MethodInfo RealMethod { get; }
 		protected TypeNode GetReturnType(TypeNode ownerType) => TypeSystem.TypeOf(RealMethod.ReturnType);
 	}
 
-	public sealed class Method : Member, IFunction
+	public sealed class Method : FunctionalMember, IFunction
 	{
 		public override TypeNode OwnerType => _ownerType;
-		public override MethodInfo RealMethod => _method;
+		public override MethodInfo RealMethod => _realMethod;
 		public override TypeNode ReturnType => _returnType;
 		public Parameter[] Parameters => _parameters;
 
 		private readonly TypeNode _ownerType;
-		private readonly MethodInfo _method;
+		private readonly MethodInfo _realMethod;
 		private readonly TypeNode _returnType;
 		private readonly Parameter[] _parameters;
 
-		internal Method(TypeNode ownerType, MethodInfo method, Parameter[] parameters, TypeNode returnType)
+		internal Method(TypeNode ownerType, MethodInfo realMethod, Parameter[] parameters, TypeNode returnType)
 		{
 			_ownerType = ownerType;
-			_method = method;
+			_realMethod = realMethod;
 			_returnType = returnType == null ? GetReturnType() : returnType;
 			_parameters = parameters;
 		}
 
 		public override string ToString()
 		{
-			string s = $"method (for: {OwnerType} real method: {RealMethod} returns {ReturnType}\nparameters:";
+			string s = $"method (for: {_ownerType} real method: {_realMethod} returns {_returnType}\nparameters:";
 			for (int i = 0; i < _parameters.Length; i++)
 				s += "\n" + _parameters[i];
 			return s + ')';
@@ -195,6 +291,18 @@ namespace MS2IPL
 
 		[BringToPL(true)]
 		public static string get(string s, long i) => $"{s[(int)i]}";
+
+		[BringToPL(false)]
+		public static decimal sqrMagnitude(Vector2 v) => (decimal)v.sqrMagnitude;
+
+		[BringToPL(false)]
+		public static decimal magnitude(Vector2 v) => (decimal)v.magnitude;
+
+		[BringToPL(false)]
+		public static Vector2 normalized(Vector2 v) => v.normalized;
+
+		[BringToPL(false)]
+		public static Vector2 prependicular(Vector2 v) => v.perpendicular;
 	}
 
 	[AttributeUsage(AttributeTargets.Method)]
@@ -215,6 +323,9 @@ namespace MS2IPL
 			ReturnType = returnType;
 		}
 	}
+
+	[AttributeUsage(AttributeTargets.Constructor)]
+	public class PLConstructor : Attribute { }
 
 	[AttributeUsage(AttributeTargets.Class)]
 	public class PLIgnore : Attribute { }

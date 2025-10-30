@@ -14,6 +14,7 @@ namespace MS2IPL
 				"float" => TypeNode.Float,
 				"bool" => TypeNode.Bool,
 				"string" => TypeNode.String,
+				"vector2" => TypeNode.Vector2,
 				_ => null
 			};
 		}
@@ -35,6 +36,8 @@ namespace MS2IPL
 				return TypeNode.Bool;
 			if (type == typeof(string))
 				return TypeNode.String;
+			if (type == typeof(Vector2))
+				return TypeNode.Vector2;
 			if (type == typeof(STD))
 				return TypeNode.STD;
 			//if (type == typeof(LogicPart) || type == typeof(Part) || type.IsSubclassOf(typeof(Part)))
@@ -76,6 +79,7 @@ namespace MS2IPL
 			{ DataType.@float.ToString(), new TypeNode(DataType.@float) },
 			{ DataType.@bool.ToString(), new TypeNode(DataType.@bool) },
 			{ DataType.@string.ToString(), new TypeNode(DataType.@string) },
+			{ DataType.vector2.ToString(), new TypeNode(DataType.@vector2) },
 			{ DataType.std.ToString(), new TypeNode(DataType.std) }
 		};
 
@@ -86,6 +90,7 @@ namespace MS2IPL
 			DataType.@float => 0m,
 			DataType.@bool => false,
 			DataType.@string => "",
+			DataType.vector2 => new Vector2(),
 			DataType.std => MS2IPL.STD.Instance,
 			_ => null
 		};
@@ -97,6 +102,7 @@ namespace MS2IPL
 		public static TypeNode Float => s_Tree[DataType.@float.ToString()];
 		public static TypeNode Bool => s_Tree[DataType.@bool.ToString()];
 		public static TypeNode String => s_Tree[DataType.@string.ToString()];
+		public static TypeNode Vector2 => s_Tree[DataType.vector2.ToString()];
 		public static TypeNode STD => s_Tree[DataType.std.ToString()];
 		public bool IsNum => this == Int || this == Float;
 		public bool IsValueType => IsNum || this == Bool;
@@ -119,6 +125,7 @@ namespace MS2IPL
 		@float,
 		@bool,
 		@string,
+		vector2,
 		std
 	}
 }
