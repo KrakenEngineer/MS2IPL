@@ -31,3 +31,12 @@ Planned:
 - Quality of life features
 - Bugfixes
 - Integration into the game
+
+How to launch:
+- Download the latest version from releases
+- Put into separate folder
+- Create code.ms2ipl
+- Open code.ms2ipl, write your code
+- Close, run the .exe
+- See results in the console.txt
+- The console also contains much debug information, errors. If there is a strange error or the error arises outside of console.txt, provide both console and code in a bug report
